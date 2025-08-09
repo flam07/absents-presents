@@ -1,0 +1,233 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Calculateur % Absences</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root {
+    --col-bg-main: #FFF6E3;
+    --col-bg-card: #BFECFF;
+    --col-accent: #FFCCEA;
+    --col-secondary: #CDC1FF;
+    --col-text: #222;
+}
+body {
+    font-family: system-ui, sans-serif;
+    background: var(--col-bg-main);
+    margin: 0;
+    padding: 20px;
+    color: var(--col-text);
+}
+h1 {
+    text-align: center;
+}
+.help {
+    background: var(--col-bg-card);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 20px;
+    font-size: 0.9rem;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 15px;
+}
+.card {
+    background: var(--col-bg-card);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+.card.total {
+    background: var(--col-secondary);
+    grid-column: 1 / -1;
+}
+.card h2 {
+    font-size: 1.1rem;
+    margin-top: 0;
+}
+label {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.85rem;
+}
+input, output {
+    width: 100%;
+    padding: 5px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+input[readonly], output {
+    background: #eee;
+    font-weight: bold;
+}
+.error {
+    color: red;
+    font-size: 0.75rem;
+}
+</style>
+</head>
+<body>
+
+<h1>Calculateur d'absences</h1>
+<div class="help">
+Saisissez pour chaque mois le nombre de jours de classe, le nombre d’élèves et les absences. 
+Les pourcentages se calculent automatiquement. Les totaux annuels apparaissent quand tous les mois sont complétés.
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const moisLabels = [
+    "Septembre","Octobre","Novembre","Décembre","Janvier","Février","Mars","Avril","Mai","Juin","Juillet"
+];
+
+const state = moisLabels.map(m => ({
+    jours: null, eleves: null, absences: null, presPossible: 0, pctPres: null, pctAbs: null
+}));
+
+function calcPresencePossible(jours, eleves) {
+    return jours * 2 * eleves;
+}
+
+function calcPercent(presentes, totales) {
+    if (totales === 0) return null;
+    return (presentes / totales * 100);
+}
+
+function validateInput(val) {
+    const num = Number(val);
+    return Number.isInteger(num) && num >= 0 ? num : null;
+}
+
+function createMonthCard(index) {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+        <h2>${moisLabels[index]}</h2>
+        <label>Jours de classe
+            <input type="number" min="0" data-field="jours">
+        </label>
+        <label>Nombre d'élèves
+            <input type="number" min="0" data-field="eleves">
+        </label>
+        <label>Présences possibles
+            <output data-field="presPossible">0</output>
+        </label>
+        <label>Absences
+            <input type="number" min="0" data-field="absences">
+            <div class="error" data-error="absences"></div>
+        </label>
+        <label>% Présences
+            <output data-field="pctPres">—</output>
+        </label>
+        <label>% Absences
+            <output data-field="pctAbs">—</output>
+        </label>
+    `;
+    return card;
+}
+
+function createTotalCard() {
+    const card = document.createElement("div");
+    card.className = "card total";
+    card.innerHTML = `
+        <h2>Totaux annuels</h2>
+        <label>Présences possibles totales
+            <output data-total="presPossible">0</output>
+        </label>
+        <label>Absences totales
+            <output data-total="absences">0</output>
+        </label>
+        <label>% Présences (total)
+            <output data-total="pctPres">—</output>
+        </label>
+        <label>% Absences (total)
+            <output data-total="pctAbs">—</output>
+        </label>
+        <div class="error" data-total="msg"></div>
+    `;
+    return card;
+}
+
+function updateMonth(index) {
+    const card = grid.children[index];
+    const jours = validateInput(card.querySelector('[data-field="jours"]').value);
+    const eleves = validateInput(card.querySelector('[data-field="eleves"]').value);
+    const absInput = card.querySelector('[data-field="absences"]');
+    const absErr = card.querySelector('[data-error="absences"]');
+
+    let absences = validateInput(absInput.value);
+    absErr.textContent = "";
+
+    let presPossible = 0, pctPres = null, pctAbs = null;
+
+    if (jours !== null && eleves !== null) {
+        presPossible = calcPresencePossible(jours, eleves);
+        if (absences !== null) {
+            if (absences > presPossible) {
+                absences = presPossible;
+                absInput.value = absences;
+                absErr.textContent = "Absences ajustées au maximum possible.";
+            }
+            const presentes = presPossible - absences;
+            pctPres = calcPercent(presentes, presPossible);
+            pctAbs = pctPres !== null ? (100 - pctPres) : null;
+        }
+    }
+
+    state[index] = { jours, eleves, absences, presPossible, pctPres, pctAbs };
+
+    card.querySelector('[data-field="presPossible"]').textContent = presPossible;
+    card.querySelector('[data-field="pctPres"]').textContent = pctPres !== null ? pctPres.toFixed(2) + "%" : "—";
+    card.querySelector('[data-field="pctAbs"]').textContent = pctAbs !== null ? pctAbs.toFixed(2) + "%" : "—";
+
+    updateTotals();
+}
+
+function updateTotals() {
+    const totalCard = grid.querySelector(".total");
+    const msg = totalCard.querySelector('[data-total="msg"]');
+    const presTot = state.reduce((sum, m) => sum + (m.presPossible || 0), 0);
+    const absTot = state.reduce((sum, m) => sum + (m.absences || 0), 0);
+
+    if (state.some(m => m.jours === null || m.eleves === null || m.presPossible === 0)) {
+        totalCard.querySelector('[data-total="presPossible"]').textContent = "—";
+        totalCard.querySelector('[data-total="absences"]').textContent = "—";
+        totalCard.querySelector('[data-total="pctPres"]').textContent = "—";
+        totalCard.querySelector('[data-total="pctAbs"]').textContent = "—";
+        msg.textContent = "Calcul en attente — complétez tous les mois.";
+        return;
+    }
+
+    msg.textContent = "";
+    totalCard.querySelector('[data-total="presPossible"]').textContent = presTot;
+    totalCard.querySelector('[data-total="absences"]').textContent = absTot;
+    const pctPresTot = calcPercent(presTot - absTot, presTot);
+    const pctAbsTot = pctPresTot !== null ? (100 - pctPresTot) : null;
+    totalCard.querySelector('[data-total="pctPres"]').textContent = pctPresTot !== null ? pctPresTot.toFixed(2) + "%" : "—";
+    totalCard.querySelector('[data-total="pctAbs"]').textContent = pctAbsTot !== null ? pctAbsTot.toFixed(2) + "%" : "—";
+}
+
+const grid = document.getElementById("grid");
+moisLabels.forEach((m, i) => {
+    const c = createMonthCard(i);
+    grid.appendChild(c);
+});
+grid.appendChild(createTotalCard());
+
+grid.querySelectorAll('input[type="number"]').forEach(input => {
+    input.addEventListener("input", () => {
+        const card = input.closest(".card");
+        const index = Array.from(grid.children).indexOf(card);
+        if (index >= 0 && index < moisLabels.length) updateMonth(index);
+    });
+});
+</script>
+
+</body>
+</html>
